@@ -1,0 +1,131 @@
+- name: download erlang
+  get_url: url=http://packages.erlang-solutions.com/erlang-solutions-1.0-1.noarch.rpm dest=/tmp/erlang.rpm
+
+- name: install erlang
+  yum: name=/tmp/erlang.rpm state=present
+
+- name: import RabbitMQ's Key
+  rpm_key: state=present key=http://www.rabbitmq.com/rabbitmq-signing-key-public.asc
+
+- name: install RabbitMQ
+  yum: name=http://www.rabbitmq.com/releases/rabbitmq-server/v3.5.3/rabbitmq-server-3.5.3-1.noarch.rpm state=present
+
+- name: enable rabbitmq service
+  service: name=rabbitmq-server enabled=yes
+
+- name: run rabbitmq service
+  service: name=rabbitmq-server state=started
+
+- name: adding rabbitmq vhost
+  command: rabbitmqctl add_vhost /sensu
+
+- name: creating rabbitmq user
+  command: rabbitmqctl add_user sensu secret
+
+- name: setting rabbitmq permissions
+  command: rabbitmqctl set_permissions -p /sensu sensu ".*" ".*" ".*"
+
+- name: download redis
+  get_url: url=http://download.redis.io/redis-stable.tar.gz dest=/tmp/redis-stable.tar.gz
+
+- name: extract redis
+  unarchive: src=/tmp/redis-stable.tar.gz dest=/tmp copy=no
+
+- name: installing gcc
+  yum: name=gcc state=present
+
+- name: building dependencies
+  command: make hiredis lua jemalloc linenoise
+  args:
+    chdir: /tmp/redis-stable/deps
+
+- name: building redis
+  command: make
+  args:
+    chdir: /tmp/redis-stable
+
+- name: building redis
+  command: make install
+  args:
+    chdir: /tmp/redis-stable
+
+- name: creating redis /etc/ directory
+  file: path=/etc/redis state=directory mode=0755
+
+- name: add redis conf
+  copy: src=redis.conf
+        dest=/etc/redis/
+
+- name: adding redis startscript
+  copy: src=redis-server
+        dest=/etc/init.d/
+        owner=root group=root mode=0755
+
+- name: add sensu repo
+  copy: src=sensu.repo
+        dest=/etc/yum.repos.d/
+        owner=root group=root mode=0644
+
+- name: install sensu
+  yum: name=sensu state=present
+
+
+- name: add sensu config file
+  copy: src=config.json
+        dest=/etc/sensu/
+        owner=sensu group=sensu mode=0644
+
+- name: adding a memory check
+  copy: src=check_memory.json
+        dest=/etc/sensu/conf.d/
+        owner=sensu group=sensu mode=0644
+
+- name: adding a default handler
+  copy: src=default_handler.json
+        dest=/etc/sensu/conf.d/
+        owner=sensu group=sensu mode=0644
+
+- name: starting redis service
+  service: name=redis-server state=started
+
+- name: starting sensu service
+  service: name=sensu-server state=started
+
+- name: configuring sensu client
+  get_url: url=http://sensuapp.org/docs/0.20/files/client.json dest=/etc/sensu/conf.d/client.json
+
+- name: adding a memory check client side
+  get_url: url=http://sensuapp.org/docs/0.20/files/check-memory.sh dest=/etc/sensu/plugins/check-memory.sh owner=sensu group=sensu mode=0751
+
+
+- name: starting sensu-client service
+  service: name=sensu-client state=started
+
+- name: starting sensu-api service
+  service: name=sensu-api state=started
+
+- name: starting sensu-server on boot
+  service: name=sensu-server enabled=yes
+
+- name: starting sensu-client on boot
+  service: name=sensu-client enabled=yes
+
+- name: starting sensu-api on boot
+  service: name=sensu-api enabled=yes
+
+- name: starting redis-server on boot
+  service: name=redis-server enabled=yes
+
+- name: install uchiwa
+  yum: name=http://dl.bintray.com/palourde/uchiwa/uchiwa-0.10.3-1.x86_64.rpm state=present
+
+- name: adding uchiwa conf
+  copy: src=uchiwa.json
+        dest=/etc/sensu/uchiwa.json
+        owner=sensu group=sensu mode=0644
+
+- name: starting uchiwa service
+  service: name=uchiwa state=started
+
+- name: starting uchiwa on boot
+  service: name=uchiwa enabled=yes
